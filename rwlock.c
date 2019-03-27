@@ -2,9 +2,11 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
 
+// Allows multiple readers, only one writer
 struct RWLock {
   int readers;
   pthread_mutex_t mutex;
@@ -48,6 +50,7 @@ void rwlock_rlock(struct RWLock *lock)
   pthread_mutex_lock(&lock->mutex);
   if (!lock->readers) {
     sem_wait(&lock->empty);
+    printf("first reader acquired room\n");
   }
   lock->readers++;
   pthread_mutex_unlock(&lock->mutex);
@@ -57,8 +60,10 @@ void rwlock_runlock(struct RWLock *lock)
 {
   // If last reader to leave, notify room empty
   pthread_mutex_lock(&lock->mutex);
+  printf("decrementing lock->readers: %d\n", lock->readers);
   lock->readers--;
   if (!lock->readers) {
+    printf("last reader leaving room\n");
     sem_post(&lock->empty);
   }
   pthread_mutex_unlock(&lock->mutex);
@@ -91,8 +96,8 @@ void *run_reader(void *ptr)
   while (1) { 
     sleep(rand() % 10);
     rwlock_rlock(lock);
-    printf("reader entered: %d\n", lock->readers);
-    sleep(rand() % 10);
+    printf("reader entered\n");
+    sleep(rand() % 3);
     rwlock_runlock(lock);
   }
 }
@@ -101,17 +106,22 @@ void run_writer(struct RWLock *lock)
 {
   rwlock_wlock(lock);
   printf("writer entered: %d\n", lock->readers);
-  sleep(5);
+  sleep(20);
   rwlock_wunlock(lock);
 }
 
 // We ignore sem_wait/post errors, which mainly arise from EINTR. We also
 // ignore pthread_mutex_lock/unlock errors, which should not occur in well
 // formed code.
+//
+// As an exercise, we may cancel the readers on EOF, although this would
+// require tedious usage of pthread_cleanup_push/pop.
 int main()
 {
   struct RWLock lock;
-  rwlock_init(&lock);
+  if (rwlock_init(&lock) == -1) {
+    syserr("rwlock_init");
+  }
 
   srand(time(NULL));
   int num_readers = 5;
