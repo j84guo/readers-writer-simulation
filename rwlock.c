@@ -114,7 +114,8 @@ void run_writer(struct RWLock *lock)
 // ignore pthread_mutex_lock/unlock errors, which should not occur in well
 // formed code.
 //
-// As an exercise, we may cancel the readers on EOF, although this would
+// Process exists when we return and child threads are destroyed. As an
+// exercise, we may cancel then join readers on EOF, although this would
 // require tedious usage of pthread_cleanup_push/pop.
 int main()
 {
